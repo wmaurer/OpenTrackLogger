@@ -1,0 +1,22 @@
+﻿<mobile:AutoSuspendApplication
+    x:Class="OpenTrackLogger.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shell="clr-namespace:Microsoft.Phone.Shell;assembly=Microsoft.Phone"
+    xmlns:mobile="clr-namespace:ReactiveUI.Mobile;assembly=ReactiveUI.Mobile"
+    xmlns:openTrackLogger="clr-namespace:OpenTrackLogger">
+
+    <!--Application Resources-->
+    <Application.Resources>
+        <openTrackLogger:LocalizedStrings x:Key="LocalizedStrings"/>
+    </Application.Resources>
+
+    <Application.ApplicationLifetimeObjects>
+        <!--Required object that handles lifetime events for the application-->
+        <shell:PhoneApplicationService
+            Launching="Application_Launching" Closing="ApplicationClosing"
+            Activated="Application_Activated" Deactivated="Application_Deactivated"
+            RunningInBackground="PhoneApplicationService_OnRunningInBackground"/>
+    </Application.ApplicationLifetimeObjects>
+
+</mobile:AutoSuspendApplication>    
