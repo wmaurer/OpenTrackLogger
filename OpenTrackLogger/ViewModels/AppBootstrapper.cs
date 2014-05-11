@@ -3,8 +3,6 @@
     using System;
     using System.Reactive.Disposables;
 
-    using Microsoft.Phone.Data.Linq;
-
     using OpenTrackLogger.Services;
     using OpenTrackLogger.Views;
 
@@ -26,18 +24,29 @@
 
             var resolver = RxApp.MutableResolver;
 
-            // TODO: why is the lambda being called twice???
-            resolver.Register(() => new TrackTrackingDetailView(), typeof(IViewFor<TrackTrackingViewModel>));
-
             resolver.RegisterConstant(this, typeof(IApplicationRootState));
             resolver.RegisterConstant(this, typeof(IScreen));
+
             resolver.RegisterConstant(new BackgroundHost(), typeof(BackgroundHost));
             resolver.RegisterConstant(new GeolocatorService(), typeof(GeolocatorService));
+            resolver.RegisterConstant(new LogService(), typeof(LogService));
 
-            var cameraService = new CameraService();
-            var localDriveService = new LocalDriveService();
+            resolver.RegisterConstant(new CameraService(), typeof(ICameraService));
+            resolver.RegisterConstant(new LocalDriveService(), typeof(ILocalDriveService));
 
-            Router.Navigate.Execute(new TrackTrackingViewModel(cameraService, localDriveService, this));
+            resolver.RegisterConstant(new TrackExportService(), typeof(ITrackExportService));
+
+            resolver.RegisterConstant(new OneDriveClientService(), typeof(IOneDriveClientService));
+            resolver.RegisterConstant(new OneDriveService(), typeof(IOneDriveService));
+
+            // TODO: why is the lambda being called twice???
+            resolver.Register(() => new TrackTrackingDetailView(), typeof(IViewFor<TrackTrackingViewModel>));
+            resolver.Register(() => new TrackListView(), typeof(IViewFor<TrackListViewModel>));
+            resolver.Register(() => new TrackView(), typeof(IViewFor<TrackViewViewModel>));
+            resolver.Register(() => new UploadTrackView(), typeof(IViewFor<UploadTrackViewModel>));
+
+            //Router.Navigate.Execute(new TrackTrackingViewModel(cameraService, localDriveService, this));
+            Router.Navigate.Execute(new TrackListViewModel(this));
             _cleanupDisposable = new CompositeDisposable();
         }
 

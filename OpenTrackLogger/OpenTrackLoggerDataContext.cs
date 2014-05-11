@@ -12,7 +12,7 @@
             : base(connectionString)
         {
             var loadOptions = new DataLoadOptions();
-            loadOptions.LoadWith<Photo>(x => x.Trackpoint);
+            loadOptions.LoadWith<Waypoint>(x => x.Trackpoint);
             LoadOptions = loadOptions;
         }
 
@@ -26,9 +26,9 @@
             get { return GetTable<Trackpoint>(); }
         }
 
-        public Table<Photo> Photos
+        public Table<Waypoint> Waypoints
         {
-            get { return GetTable<Photo>(); }
+            get { return GetTable<Waypoint>(); }
         }
     }
 }

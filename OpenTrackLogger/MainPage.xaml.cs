@@ -1,10 +1,18 @@
 ﻿namespace OpenTrackLogger
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Reactive.Disposables;
+    using System.Reactive.Linq;
     using System.Windows;
+
+    using Microsoft.Phone.Shell;
 
     using OpenTrackLogger.ViewModels;
 
     using ReactiveUI;
+
+    using CompositeDisposable = Microsoft.Phone.Reactive.CompositeDisposable;
 
     public partial class MainPage : IViewFor<AppBootstrapper>
     {
@@ -13,10 +21,33 @@
         {
             InitializeComponent();
 
-            this.OneWayBind(ViewModel, x => x.Router, x => x.Router.Router);
+            var menuItems = new Dictionary<AbMenuItemId, ApplicationBarMenuItem>
+            {
+                { AbMenuItemId.New, new ApplicationBarMenuItem("New") },
+                { AbMenuItemId.Delete, new ApplicationBarMenuItem("Delete") },
+                { AbMenuItemId.Upload, new ApplicationBarMenuItem("Upload") }
+            };
 
-            // Sample code to localize the ApplicationBar
-            //BuildLocalizedApplicationBar();
+            var menuItemsDisposable = Disposable.Empty;
+
+            this.WhenAnyValue(x => x.Router.Router.CurrentViewModel)
+                .SelectMany(x => x)
+                .Where(x => x is IHasApplicationBar)
+                .Cast<IHasApplicationBar>()
+                .Subscribe(x => {
+                    menuItemsDisposable.Dispose();
+                    ApplicationBar.MenuItems.Clear();
+                    var disposables = new List<IDisposable>();
+                    if (x.MenuItems != null) {
+                        foreach (var abMenuItem in x.MenuItems) {
+                            ApplicationBar.MenuItems.Add(menuItems[abMenuItem.Id]);
+                            disposables.Add(menuItems[abMenuItem.Id].Events().Click.Subscribe(y => abMenuItem.Command.Execute(y)));
+                        }
+                    }
+                    menuItemsDisposable = new CompositeDisposable(disposables.ToArray());
+                });
+
+            this.OneWayBind(ViewModel, x => x.Router, x => x.Router.Router);
         }
 
         //protected override void OnNavigatedTo(NavigationEventArgs e)

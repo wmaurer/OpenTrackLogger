@@ -2,14 +2,18 @@
 {
     using System;
     using System.Diagnostics;
+    using System.IO;
     using System.Windows;
     using System.Windows.Markup;
     using System.Windows.Navigation;
+
+    using Windows.Storage;
 
     using Microsoft.Phone.Controls;
     using Microsoft.Phone.Shell;
 
     using OpenTrackLogger.Resources;
+    using OpenTrackLogger.Services;
     using OpenTrackLogger.ViewModels;
 
     using ReactiveUI;
@@ -18,13 +22,14 @@
     public partial class App : AutoSuspendApplication
     {
         private AppBootstrapper _appBootstrapper;
+
         /// <summary>
         /// Constructor for the Application object.
         /// </summary>
         public App()
         {
             // Global handler for uncaught exceptions. TODO: do it the reactiveui way
-            //UnhandledException += Application_UnhandledException;
+            UnhandledException += ApplicationUnhandledException;
 
             // Standard XAML initialization
             InitializeComponent();
@@ -99,8 +104,24 @@
         }
 
         // Code to execute on Unhandled Exceptions
-        private void Application_UnhandledException(object sender, ApplicationUnhandledExceptionEventArgs e)
+        private static async void ApplicationUnhandledException(object sender, ApplicationUnhandledExceptionEventArgs e)
         {
+            try {
+                var file = await ApplicationData.Current.LocalFolder.CreateFileAsync(string.Format("Exception{0}.txt", DateTime.UtcNow.ToString("yyyyMMddHHmmss")), CreationCollisionOption.GenerateUniqueName);
+                var messageToWrite = string.Format("ApplicationUnhandledException\n{0}Z: {1}\n", DateTime.UtcNow.ToString("s"), e.ExceptionObject);
+                using (var stream = await file.OpenStreamForWriteAsync()) {
+                    stream.Seek(0, SeekOrigin.End);
+                    var chars = messageToWrite.ToCharArray();
+                    var bytes = new byte[chars.Length * sizeof(char)];
+                    Buffer.BlockCopy(chars, 0, bytes, 0, bytes.Length);
+                    await stream.WriteAsync(bytes, 0, bytes.Length);
+                }
+            }
+            catch (Exception ex) {
+                Debug.WriteLine(ex.ToString());
+                throw new Exception("failed to log exception", ex);
+            }
+
             if (Debugger.IsAttached)
             {
                 // An unhandled exception has occurred; break into the debugger
@@ -226,9 +247,9 @@
                 throw;
             }
         }
-
-        private void PhoneApplicationService_OnRunningInBackground(object sender, RunningInBackgroundEventArgs e)
+        private async void PhoneApplicationService_OnRunningInBackground(object sender, RunningInBackgroundEventArgs e)
         {
+            await RxApp.DependencyResolver.GetService<LogService>().Log("PhoneApplicationService_OnRunningInBackground");
         }
     }
 }

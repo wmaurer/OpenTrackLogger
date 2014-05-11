@@ -16,7 +16,14 @@
             this.BindCommand(ViewModel, x => x.StopTracking);
             this.BindCommand(ViewModel, x => x.CapturePhoto);
             this.BindCommand(ViewModel, x => x.ExportTrack);
-            this.BindCommand(ViewModel, x => x.UploadTrack);
+            //this.BindCommand(ViewModel, x => x.UploadTrack);
+
+            this.OneWayBind(ViewModel, x => x.Status, x => x.Status.Text);
+            this.OneWayBind(ViewModel, x => x.CurrentLocation, x => x.CurrentLocation.Text);
+            this.OneWayBind(ViewModel, x => x.Elevation, x => x.Elevation.Text);
+            this.OneWayBind(ViewModel, x => x.TimeSinceLast, x => x.TimeSinceLast.Text);
+
+            //this.BindCommand(ViewModel, x => x.RestartTracking);
 
             //this.OneWayBind(ViewModel, x => x.Trackpoints, x => x.CoordinatesListBox.ItemsSource);
         }

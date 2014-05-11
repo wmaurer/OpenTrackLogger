@@ -24,12 +24,22 @@
                 <RowDefinition/>
                 <RowDefinition/>
                 <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
             </Grid.RowDefinitions>
             <Button x:Name="StartTracking" Grid.Row="0" Content="Start"/>
             <Button x:Name="CapturePhoto" Grid.Row="1" Content="Photo"/>
             <Button x:Name="StopTracking" Grid.Row="2" Content="Stop"/>
             <Button x:Name="ExportTrack" Grid.Row="3" Content="Export"/>
-            <Button x:Name="UploadTrack" Grid.Row="4" Content="Upload"/>
+            <!--<Button x:Name="UploadTrack" Grid.Row="4" Content="Upload"/>-->
+            <TextBlock x:Name="Status" Grid.Row="5" Margin="0,50,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="CurrentLocation" Grid.Row="6" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="Elevation" Grid.Row="7" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TimeSinceLast" Grid.Row="8" Margin="0,0,0,10" HorizontalAlignment="Center"/>
+            <!--<Button x:Name="RestartTracking" Grid.Row="9" Content="Restart"/>-->
         </Grid>
         <!--<ListBox x:Name="CoordinatesListBox" Grid.Row="1">
             <ListBox.ItemTemplate>

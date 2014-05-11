@@ -97,16 +97,23 @@
     </Compile>
     <Compile Include="BackgroundHost.cs" />
     <Compile Include="Common\LambdaComparer.cs" />
+    <Compile Include="Controls\ReactiveUIRegions.cs" />
     <Compile Include="LocalizedStrings.cs" />
     <Compile Include="MainPage.xaml.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Mixins\ApplicationBarMenuItemMixin.cs" />
     <Compile Include="Mixins\CameraCaptureTaskMixin.cs" />
+    <Compile Include="Mixins\ObservableMixins.cs" />
     <Compile Include="Mixins\DisposableMixins.cs" />
     <Compile Include="Mixins\GeolocatorMixin.cs" />
-    <Compile Include="Models\Photo.cs" />
+    <Compile Include="Mixins\ProgressMixin.cs" />
+    <Compile Include="Mixins\ThrownExceptionsMixin.cs" />
+    <Compile Include="Models\Enums.cs" />
+    <Compile Include="Models\Waypoint.cs" />
     <Compile Include="Models\Track.cs" />
     <Compile Include="Models\Trackpoint.cs" />
+    <Compile Include="Models\TrackSummary.cs" />
     <Compile Include="OpenTrackLoggerDataContext.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Resources\AppResources.Designer.cs">
@@ -115,20 +122,33 @@
       <DependentUpon>AppResources.resx</DependentUpon>
     </Compile>
     <Compile Include="Services\CameraCaptureService.cs" />
+    <Compile Include="Services\ExceptionLoggerService.cs" />
     <Compile Include="Services\GeolocatorService.cs" />
     <Compile Include="Services\LocalDatabaseService.cs" />
     <Compile Include="Services\LocalDriveService.cs" />
+    <Compile Include="Services\LogService.cs" />
+    <Compile Include="Services\OneDriveClientService.cs" />
     <Compile Include="Services\OneDriveService.cs" />
     <Compile Include="Services\TrackExporterService.cs" />
     <Compile Include="Services\TrackingService.cs" />
     <Compile Include="ViewModels\AppBootstrapper.cs" />
+    <Compile Include="ViewModels\TrackListViewModel.cs" />
     <Compile Include="ViewModels\TrackpointViewModel.cs" />
+    <Compile Include="ViewModels\TrackSummaryViewModel.cs" />
     <Compile Include="ViewModels\TrackTrackingViewModel.cs" />
+    <Compile Include="ViewModels\TrackViewViewModel.cs" />
+    <Compile Include="ViewModels\UploadTrackViewModel.cs" />
     <Compile Include="Views\TrackListView.xaml.cs">
       <DependentUpon>TrackListView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Views\TrackView.xaml.cs">
+      <DependentUpon>TrackView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Views\TrackTrackingDetailView.xaml.cs">
       <DependentUpon>TrackTrackingDetailView.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Views\UploadTrackView.xaml.cs">
+      <DependentUpon>UploadTrackView.xaml</DependentUpon>
     </Compile>
   </ItemGroup>
   <ItemGroup>
@@ -144,9 +164,17 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="Views\TrackView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Views\TrackTrackingDetailView.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Views\UploadTrackView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
   <ItemGroup>
@@ -203,6 +231,9 @@
     <Reference Include="ReactiveUI.Xaml">
       <HintPath>..\packages\reactiveui-platforms.5.5.0\lib\WP8\ReactiveUI.Xaml.dll</HintPath>
     </Reference>
+    <Reference Include="System.IO.Compression">
+      <HintPath>..\packages\Microsoft.Bcl.Compression.3.9.83\lib\wp8\System.IO.Compression.dll</HintPath>
+    </Reference>
     <Reference Include="System.Reactive.Core">
       <HintPath>..\packages\Rx-Core.2.1.30214.0\lib\WP8\System.Reactive.Core.dll</HintPath>
     </Reference>
@@ -232,6 +263,9 @@
       <Name>OpenTrackLogger.Secrets</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Common\ApplicationBar\" />
+  </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\Microsoft\$(TargetFrameworkIdentifier)\$(TargetFrameworkVersion)\Microsoft.$(TargetFrameworkIdentifier).$(TargetFrameworkVersion).Overrides.targets" />
   <Import Project="$(MSBuildExtensionsPath)\Microsoft\$(TargetFrameworkIdentifier)\$(TargetFrameworkVersion)\Microsoft.$(TargetFrameworkIdentifier).CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
@@ -248,5 +282,15 @@
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
     <Error Condition="!Exists('$(SolutionDir)\.nuget\NuGet.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\.nuget\NuGet.targets'))" />
+  </Target>
+  <Import Project="..\packages\Microsoft.Bcl.Build.1.0.14\tools\Microsoft.Bcl.Build.targets" Condition="Exists('..\packages\Microsoft.Bcl.Build.1.0.14\tools\Microsoft.Bcl.Build.targets')" />
+  <Target Name="EnsureBclBuildImported" BeforeTargets="BeforeBuild" Condition="'$(BclBuildImported)' == ''">
+    <Error Condition="!Exists('..\packages\Microsoft.Bcl.Build.1.0.14\tools\Microsoft.Bcl.Build.targets')" Text="This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=317567." HelpKeyword="BCLBUILD2001" />
+    <Error Condition="Exists('..\packages\Microsoft.Bcl.Build.1.0.14\tools\Microsoft.Bcl.Build.targets')" Text="The build restored NuGet packages. Build the project again to include these packages in the build. For more information, see http://go.microsoft.com/fwlink/?LinkID=317568." HelpKeyword="BCLBUILD2002" />
+  </Target>
+  <Import Project="..\packages\Microsoft.Bcl.Compression.3.9.83\tools\Microsoft.Bcl.Compression.targets" Condition="Exists('..\packages\Microsoft.Bcl.Compression.3.9.83\tools\Microsoft.Bcl.Compression.targets')" />
+  <Target Name="EnsureBclCompressionImported" BeforeTargets="BeforeBuild" Condition="'$(BclCompressionImported)' == ''">
+    <Error Condition="!Exists('..\packages\Microsoft.Bcl.Compression.3.9.83\tools\Microsoft.Bcl.Compression.targets')" Text="This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=317567." HelpKeyword="BCLBUILD2001" />
+    <Error Condition="Exists('..\packages\Microsoft.Bcl.Compression.3.9.83\tools\Microsoft.Bcl.Compression.targets')" Text="The build restored NuGet packages. Build the project again to include these packages in the build. For more information, see http://go.microsoft.com/fwlink/?LinkID=317567." HelpKeyword="BCLBUILD2002" />
   </Target>
 </Project>

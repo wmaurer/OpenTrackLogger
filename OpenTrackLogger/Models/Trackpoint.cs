@@ -17,7 +17,6 @@
 
         public Trackpoint(int trackId, Geocoordinate geoCoordinate)
         {
-            double x;
             TrackId = trackId;
             Timestamp = geoCoordinate.Timestamp.UtcDateTime;
             Latitude = geoCoordinate.Latitude;

@@ -2,14 +2,16 @@
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics;
     using System.IO;
     using System.Reactive.Disposables;
     using System.Reactive.Linq;
 
     using Windows.Devices.Geolocation;
 
+    using Microsoft.Phone.Tasks;
+
     using OpenTrackLogger.Common;
+    using OpenTrackLogger.Mixins;
     using OpenTrackLogger.Models;
     using OpenTrackLogger.Services;
 
@@ -17,9 +19,14 @@
 
     public class TrackTrackingViewModel : ReactiveObject, IRoutableViewModel
     {
-        public TrackTrackingViewModel(ICameraService cameraService, ILocalDriveService localDriveService, IScreen screen = null)
+        public TrackTrackingViewModel(IScreen screen = null)
         {
+            var cameraService = RxApp.DependencyResolver.GetService<ICameraService>();
+            var localDriveService = RxApp.DependencyResolver.GetService<ILocalDriveService>();
+
             HostScreen = screen;
+
+            var logger = RxApp.DependencyResolver.GetService<LogService>();
 
             var geolocatorService = RxApp.DependencyResolver.GetService<GeolocatorService>();
             var localDatabaseService = new LocalDatabaseService();
@@ -32,8 +39,25 @@
             StartTracking = new ReactiveCommand(isNotTracking);
             StopTracking = new ReactiveCommand(isTracking);
 
-            geolocatorService.StatusChanged
-                .Subscribe(x => { var status = x.Status; }, () => { var xxx = 1; });
+            _status = geolocatorService.StatusChanged
+                .Select(x => x.Status.ToString() + " " + DateTime.UtcNow.ToString("yyyyMMddHHmmss"))
+                .ToProperty(this, x => x.Status);
+
+            this.WhenAnyValue(x => x.Status)
+                .Subscribe(async x => {
+                    if (currentTrackpoint != null) {
+                        await logger.Log(string.Format("WhenAnyValue(Status): {0} {1} {2},{3}", currentTrackpoint.Id, currentTrackpoint.Timestamp, currentTrackpoint.Latitude, currentTrackpoint.Longitude));
+                    }
+                    await logger.Log("WhenAnyValue(Status): " + x);                    
+                });
+
+            _currentLocation = geolocatorService.PositionChanged
+                .Select(x => string.Format("{0:F13},{1:F13}", x.Position.Coordinate.Latitude, x.Position.Coordinate.Longitude))
+                .ToProperty(this, x => x.CurrentLocation);
+
+            _elevation = geolocatorService.PositionChanged
+                .Select(x => !x.Position.Coordinate.Altitude.HasValue ? string.Empty : x.Position.Coordinate.Altitude.Value.ToString())
+                .ToProperty(this, x => x.Elevation);
 
             var trackpoints = geolocatorService.PositionChanged
                 .Select(x => new TrackCoordinate(currentTrack, x.Position.Coordinate))
@@ -41,8 +65,21 @@
                 .Select(x => x.Coordinate)
                 .Select(x => new Trackpoint(currentTrack.Id, x));
 
+            DateTime? lastReceivedPositionChanged = null;
+            _timeSinceLast = geolocatorService.PositionChanged
+                .Select(x => {
+                    var timeSinceLast = string.Empty;
+                    var now = DateTime.Now;
+                    if (lastReceivedPositionChanged.HasValue) {
+                        timeSinceLast = (now - lastReceivedPositionChanged.Value).TotalMilliseconds.ToString("N0");
+                    }
+                    lastReceivedPositionChanged = now;
+                    return timeSinceLast;
+                }).ToProperty(this, x => x.TimeSinceLast);
+
+
             trackpoints
-                .Do(x => Debug.WriteLine("{0}: {1}, {2}", DateTime.Now.TimeOfDay, x.Latitude, x.Longitude))
+                //.Do(x => Debug.WriteLine("{0}: {1}, {2}", DateTime.Now.TimeOfDay, x.Latitude, x.Longitude))
                 .ObserveOn(RxApp.TaskpoolScheduler)
                 .Subscribe(x => {
                     localDatabaseService.InsertTrackpoint(x);
@@ -54,49 +91,63 @@
             Observable.Merge(
                 StartTracking.Select(_ => true),
                 StopTracking.Select(_ => false))
-                .Subscribe(x => {
+                .Subscribe(async x => {
                     IsTracking = x;
                     if (IsTracking) {
                         if (currentTrack == null) {
                             currenttTrackTimeId = DateTime.Now.ToString("yyyyMMddHHmmss");
                             currentTrack = localDatabaseService.CreateTrack();
+                            await logger.Log(string.Format("Creating new track. Id: {0}. TrackTimeId: {1}", currentTrack.Id, currenttTrackTimeId));
+                        }
+                        else {
+                            await logger.Log(string.Format("Continuing track. Id: {0}. TrackTimeId: {1}", currentTrack.Id, currenttTrackTimeId));
                         }
                         disp = geolocatorService.Start();
                     }
                     else {
+                        await logger.Log(string.Format("Stopping track. Id: {0}", currentTrack.Id));
                         disp.Dispose();
                     }   
                 });
 
-            CapturePhoto = new ReactiveCommand(isTracking);
+            var insertPhoto = new ReactiveCommand();
+            insertPhoto.ThrownExceptions.LogException("insertPhoto received exception");
+            insertPhoto.RegisterAsyncTask(async x => {
+                var photoResult = (PhotoResult)x;
+                var filename = Path.GetFileName(photoResult.OriginalFileName);
+                if (string.IsNullOrEmpty(filename)) return;
+                await localDriveService.SavePhoto(currenttTrackTimeId, filename, photoResult.ChosenPhoto);
+                var photoWaypoint = new Waypoint { TrackId = currentTrack.Id, WaypointType = (int)WaypointType.Photo, TrackpointId = currentTrackpoint.Id, CreatedAt = DateTime.Now, Link = filename };
+                localDatabaseService.InsertPhoto(photoWaypoint);
+                await logger.Log(string.Format("insertPhoto: {0} {1} {2},{3}", currentTrackpoint.Id, currentTrackpoint.Timestamp, currentTrackpoint.Latitude, currentTrackpoint.Longitude));
+                await logger.Log("insertPhoto: " + photoWaypoint.Id + ", " + photoWaypoint.Link);
+            });
+
+            CapturePhoto = new ReactiveCommand(isTracking.CombineLatest(insertPhoto.IsExecuting, (tracking, executing) => tracking && !executing).DistinctUntilChanged());
             CapturePhoto.Subscribe(x => cameraService.CapturePhoto());
 
-            cameraService.PhotoCaptureCompleted.Subscribe(async x => {
-                var filename = Path.GetFileName(x.OriginalFileName);
-                if (string.IsNullOrEmpty(filename)) return;
-                await localDriveService.SavePhoto(currenttTrackTimeId, filename, x.ChosenPhoto);
-                localDatabaseService.InsertPhoto(new Photo { TrackId = currentTrack.Id, TrackpointId = currentTrackpoint.Id, CreatedAt = DateTime.Now, Filename = filename });
-            });
+            cameraService.PhotoCaptureCompleted
+                .ObserveOn(RxApp.TaskpoolScheduler)
+                .Subscribe(insertPhoto.Execute);
 
-            ExportTrack = new ReactiveCommand(isNotTracking);
-            ExportTrack.Subscribe(_ => {
-                var track = localDatabaseService.GetTrack(currentTrack.Id);
-                localDriveService.ExportTrack(currenttTrackTimeId, s => currentTrack.WriteToStream(s));
-            });
-
-            var sds = new OneDriveService();
-            UploadTrack = new ReactiveCommand(isNotTracking);
-            UploadTrack.Subscribe(async _ => await sds.UploadToSkyDrive(await localDriveService.GetTrackFolder(currenttTrackTimeId)));
+            //var sds = new OneDriveService();
+            //UploadTrack = new ReactiveCommand(isNotTracking);
+            //UploadTrack.ThrownExceptions.LogException("UploadTrack received exception");
+            //UploadTrack.RegisterAsyncTask(async o => await sds.UploadToSkyDrive(await localDriveService.GetTrackFolder(currenttTrackTimeId)));
 
             var backgroundHost = RxApp.DependencyResolver.GetService<BackgroundHost>();
             var supressChangeDisposable = Disposable.Empty;
             var isRunningInBackGround = false;
-            backgroundHost.IsRunningInBackground.Subscribe(_ => {
+            backgroundHost.IsRunningInBackground.Subscribe(async _ => {
+                await logger.Log("backgroundHost.IsRunningInBackground");
                 if (!isRunningInBackGround)
                     supressChangeDisposable = new CompositeDisposable { SuppressChangeNotifications(), Disposable.Create(() => isRunningInBackGround = false) };
                 isRunningInBackGround = true;
             });
-            backgroundHost.IsResuming.Subscribe(_ => supressChangeDisposable.Dispose());
+            backgroundHost.IsResuming.Subscribe(async _ => {
+                await logger.Log("backgroundHost.IsResuming");
+                supressChangeDisposable.Dispose();                
+            });
         }
 
         private class TrackCoordinate
@@ -121,11 +172,11 @@
 
 #if DEBUG
                 if (!isTheSame) {
-                    Debug.WriteLine("--");
-                    Debug.WriteLine("TrackIds:  {0} {1}", left.Track.Id, right.Track.Id);
-                    Debug.WriteLine("Latitude:  {0} {1} Δ: {2}", left.Coordinate.Latitude, right.Coordinate.Latitude, Math.Abs(left.Coordinate.Latitude - right.Coordinate.Latitude));
-                    Debug.WriteLine("Longitude: {0} {1} Δ: {2}", left.Coordinate.Longitude, right.Coordinate.Longitude, Math.Abs(left.Coordinate.Longitude - right.Coordinate.Longitude));
-                    Debug.WriteLine("--");
+                    //Debug.WriteLine("--");
+                    //Debug.WriteLine("TrackIds:  {0} {1}", left.Track.Id, right.Track.Id);
+                    //Debug.WriteLine("Latitude:  {0} {1} Δ: {2}", left.Coordinate.Latitude, right.Coordinate.Latitude, Math.Abs(left.Coordinate.Latitude - right.Coordinate.Latitude));
+                    //Debug.WriteLine("Longitude: {0} {1} Δ: {2}", left.Coordinate.Longitude, right.Coordinate.Longitude, Math.Abs(left.Coordinate.Longitude - right.Coordinate.Longitude));
+                    //Debug.WriteLine("--");
                 }
 #endif
 
@@ -148,7 +199,9 @@
 
         public IReactiveCommand ExportTrack { get; private set; }
 
-        public IReactiveCommand UploadTrack { get; private set; }
+        //public IReactiveCommand UploadTrack { get; private set; }
+
+        //public IReactiveCommand RestartTracking { get; private set; }
 
         private bool _isTracking;
         public bool IsTracking
@@ -157,15 +210,33 @@
             private set { this.RaiseAndSetIfChanged(ref _isTracking, value); }
         }
 
+        private readonly ObservableAsPropertyHelper<string> _status;
+        public string Status
+        {
+            get { return _status.Value; }
+        }
+
         private readonly ObservableAsPropertyHelper<string> _currentLocation;
         public string CurrentLocation
         {
             get { return _currentLocation.Value; }
         }
 
+        private readonly ObservableAsPropertyHelper<string> _elevation;
+        public string Elevation
+        {
+            get { return _elevation.Value; }
+        }
+
+        private readonly ObservableAsPropertyHelper<string> _timeSinceLast;
+        public string TimeSinceLast
+        {
+            get { return _timeSinceLast.Value; }
+        }
+
         public string UrlPathSegment
         {
-            get { return "HomePage"; }
+            get { return "TrackTracking"; }
         }
 
         public IScreen HostScreen { get; private set; }

@@ -21,13 +21,6 @@
             };
         }
 
-        //public void Stop()
-        //{
-        //    if (_statusChangedDisposable != null) _statusChangedDisposable.Dispose();
-        //    if (_positionChangedDisposable != null) _positionChangedDisposable.Dispose();
-        //    _geolocator = null;
-        //}
-
         private readonly Subject<StatusChangedEventArgs> _statusChanged = new Subject<StatusChangedEventArgs>();
         public IObservable<StatusChangedEventArgs> StatusChanged { get { return _statusChanged; } }
 

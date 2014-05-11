@@ -15,13 +15,9 @@
     shell:SystemTray.IsVisible="True">
 
     <xaml:RoutedViewHost x:Name="Router" />
-
+    
     <phone:PhoneApplicationPage.ApplicationBar>
-        <shell:ApplicationBar>
-            <shell:ApplicationBar.MenuItems>
-                <shell:ApplicationBarMenuItem Text="New"/>
-            </shell:ApplicationBar.MenuItems>
-        </shell:ApplicationBar>
+        <shell:ApplicationBar IsMenuEnabled="True"/>
     </phone:PhoneApplicationPage.ApplicationBar>
 
 

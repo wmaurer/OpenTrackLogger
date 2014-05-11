@@ -1,102 +1,150 @@
 ﻿namespace OpenTrackLogger.Services
 {
-    using System.Collections.Generic;
+    using System;
     using System.IO;
     using System.Linq;
+    using System.Threading.Tasks;
     using System.Xml;
-    using System.Xml.Linq;
+
+    using Microsoft.Phone.Reactive;
 
     using OpenTrackLogger.Models;
 
-    public static class TrackExporterService
+    public class TrackExportProgress
+    {
+        public int WaypointsWritten { get; private set; }
+        public int TotalWaypoints { get; private set; }
+
+        public int TrackpointsWritten { get; private set; }
+        public int TotalTrackpoints { get; private set; }
+
+        public int NodesWritten { get; private set; }
+        public int TotalNodes { get; private set; }
+        public double PercentageComplete { get; private set; }
+
+        internal TrackExportProgress(int waypointsWritten, int totalWaypoints, int trackpointsWritten, int totalTrackpoints)
+        {
+            WaypointsWritten = waypointsWritten;
+            TotalWaypoints = totalWaypoints;
+            TrackpointsWritten = trackpointsWritten;
+            TotalTrackpoints = totalTrackpoints;
+            NodesWritten = waypointsWritten + trackpointsWritten;
+            TotalNodes = totalWaypoints + TotalTrackpoints;
+            PercentageComplete = NodesWritten / (double)TotalNodes * 100;
+        }
+    }
+
+    public interface ITrackExportService
+    {
+        Task WriteTrackToStream(TrackSummary trackSummary, Stream writeStream);
+        IObservable<TrackExportProgress> TrackExportProgress { get; }
+    }
+
+    public class TrackExportService : ITrackExportService
     {
         private const string _ns = "http://www.topografix.com/GPX/1/1";
         private const string _nsXsi = "http://www.w3.org/2001/XMLSchema-instance";
 
-        public static void WriteToStream(this Track track, Stream writeStream)
+        public TrackExportService()
+        {
+            _trackExportProgress = new Subject<TrackExportProgress>();    
+        }
+
+        public async Task WriteTrackToStream(TrackSummary trackSummary, Stream writeStream)
         {
             using (var xmlWriter = XmlWriter.Create(writeStream, new XmlWriterSettings { Async = true })) {
-                xmlWriter.WriteStartDocumentAsync(false);
+                await xmlWriter.WriteStartDocumentAsync(false);
 
-                xmlWriter.WriteStartElementAsync(null, "gpx", _ns);
-                xmlWriter.WriteAttributeStringAsync(null, "version", null, "1.1");
-                xmlWriter.WriteAttributeStringAsync(null, "creator", null, "OpenTrackLogger for Windows Phone - TODO: ADD URL");
-                xmlWriter.WriteAttributeStringAsync("xmlns", "xsi", null, _nsXsi);
-                xmlWriter.WriteAttributeStringAsync("xsi", "schemaLocation", null, "http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd");
-
+                await xmlWriter.WriteStartElementAsync(null, "gpx", _ns);
+                await xmlWriter.WriteAttributeStringAsync(null, "version", null, "1.1");
+                await xmlWriter.WriteAttributeStringAsync(null, "creator", null, "OpenTrackLogger for Windows Phone - TODO: ADD URL");
+                await xmlWriter.WriteAttributeStringAsync("xmlns", "xsi", null, _nsXsi);
+                await xmlWriter.WriteAttributeStringAsync("xsi", "schemaLocation", null, "http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd");
 
                 using (var db = new OpenTrackLoggerDataContext(OpenTrackLoggerDataContext.ConnectionString)) {
-                    var photos = db.Photos
-                        .Where(x => x.TrackId == track.Id)
+                    var waypoints = db.Waypoints
+                        .Where(x => x.TrackId == trackSummary.Track.Id)
                         .Join(db.Trackpoints, p => p.TrackpointId, tp => tp.Id, (p, tp) => p)
                         .OrderBy(p => p.CreatedAt);
 
-                    foreach (var photo in photos) {
-                        xmlWriter.WriteStartElementAsync(null, "wpt", _ns);
+                    var waypointIndex = 0;
 
-                        xmlWriter.WriteAttributeStringAsync(null, "lat", null, photo.Trackpoint.Latitude.ToString());
-                        xmlWriter.WriteAttributeStringAsync(null, "lon", null, photo.Trackpoint.Longitude.ToString());
+                    foreach (var waypoint in waypoints) {
+                        await xmlWriter.WriteStartElementAsync(null, "wpt", _ns);
 
-                        if (photo.Trackpoint.Elevation.HasValue) {
-                            xmlWriter.WriteElementStringAsync(null, "ele", _ns, photo.Trackpoint.Elevation.ToString());
+                        await xmlWriter.WriteAttributeStringAsync(null, "lat", null, waypoint.Trackpoint.Latitude.ToString());
+                        await xmlWriter.WriteAttributeStringAsync(null, "lon", null, waypoint.Trackpoint.Longitude.ToString());
+
+                        if (waypoint.Trackpoint.Elevation.HasValue && !double.IsNaN(waypoint.Trackpoint.Elevation.Value)) {
+                            await xmlWriter.WriteElementStringAsync(null, "ele", _ns, waypoint.Trackpoint.Elevation.Value.ToString());
                         }
 
-                        xmlWriter.WriteElementStringAsync(null, "time", _ns, photo.CreatedAt.ToString("s") + "Z");
+                        await xmlWriter.WriteElementStringAsync(null, "time", _ns, waypoint.CreatedAt.ToString("s") + "Z");
 
-                        xmlWriter.WriteStartElementAsync(null, "name", _ns);
-                        xmlWriter.WriteCDataAsync("Picture");
-                        xmlWriter.WriteEndElementAsync(); // name
+                        await xmlWriter.WriteStartElementAsync(null, "name", _ns);
+                        await xmlWriter.WriteCDataAsync("Picture");
+                        await xmlWriter.WriteEndElementAsync(); // name
 
-                        xmlWriter.WriteStartElementAsync(null, "link", _ns);
-                        xmlWriter.WriteAttributeStringAsync(null, "href", null, photo.Filename);
-                        xmlWriter.WriteElementStringAsync(null, "name", _ns, photo.Filename);
-                        xmlWriter.WriteEndElementAsync(); // link
+                        await xmlWriter.WriteStartElementAsync(null, "link", _ns);
+                        await xmlWriter.WriteAttributeStringAsync(null, "href", null, waypoint.Link);
+                        await xmlWriter.WriteElementStringAsync(null, "name", _ns, waypoint.Link);
+                        await xmlWriter.WriteEndElementAsync(); // link
 
-                        xmlWriter.WriteEndElementAsync(); // wpt
+                        await xmlWriter.WriteEndElementAsync(); // wpt
+
+                        _trackExportProgress.OnNext(new TrackExportProgress(++waypointIndex, trackSummary.NumberOfWaypoints, 0, trackSummary.NumberOfTrackpoints));
                     }
+                }
 
+                using (var db = new OpenTrackLoggerDataContext(OpenTrackLoggerDataContext.ConnectionString)) {
                     var trackpoints = db.Trackpoints
-                        .Where(x => x.TrackId == track.Id)
+                        .Where(x => x.TrackId == trackSummary.Track.Id)
                         .OrderBy(x => x.Timestamp);
 
-                    xmlWriter.WriteStartElementAsync(null, "trk", _ns);
+                    var trackpointIndex = 0;
 
-                    xmlWriter.WriteStartElementAsync(null, "name", _ns);
-                    xmlWriter.WriteCDataAsync("Tracked with OpenTrackLogger for Windows Phone");
-                    xmlWriter.WriteEndElementAsync(); // name
+                    await xmlWriter.WriteStartElementAsync(null, "trk", _ns);
 
-                    xmlWriter.WriteStartElementAsync(null, "trkseg", _ns);
+                    await xmlWriter.WriteStartElementAsync(null, "name", _ns);
+                    await xmlWriter.WriteCDataAsync("Tracked with OpenTrackLogger for Windows Phone");
+                    await xmlWriter.WriteEndElementAsync(); // name
 
+                    await xmlWriter.WriteStartElementAsync(null, "trkseg", _ns);
 
                     foreach (var trackpoint in trackpoints) {
-                        xmlWriter.WriteStartElementAsync(null, "trkpt", _ns);
-                        xmlWriter.WriteAttributeStringAsync(null, "lat", null, trackpoint.Latitude.ToString());
-                        xmlWriter.WriteAttributeStringAsync(null, "lon", null, trackpoint.Longitude.ToString());
+                        await xmlWriter.WriteStartElementAsync(null, "trkpt", _ns);
+                        await xmlWriter.WriteAttributeStringAsync(null, "lat", null, trackpoint.Latitude.ToString());
+                        await xmlWriter.WriteAttributeStringAsync(null, "lon", null, trackpoint.Longitude.ToString());
 
-                        if (trackpoint.Elevation.HasValue) {
-                            xmlWriter.WriteElementStringAsync(null, "ele", _ns, trackpoint.Elevation.ToString());
+                        if (trackpoint.Elevation.HasValue && !double.IsNaN(trackpoint.Elevation.Value)) {
+                            await xmlWriter.WriteElementStringAsync(null, "ele", _ns, trackpoint.Elevation.Value.ToString());
                         }
 
-                        xmlWriter.WriteElementStringAsync(null, "time", _ns, trackpoint.Timestamp.ToString("s") + "Z");
+                        await xmlWriter.WriteElementStringAsync(null, "time", _ns, trackpoint.Timestamp.ToString("s") + "Z");
 
-                        if (trackpoint.Speed.HasValue) {
-                            xmlWriter.WriteStartElementAsync(null, "extensions", _ns);
-                            xmlWriter.WriteElementStringAsync(null, "speed", _ns, trackpoint.Speed.ToString());
-                            xmlWriter.WriteEndElementAsync(); // extensions
+                        if (trackpoint.Speed.HasValue && !double.IsNaN(trackpoint.Speed.Value)) {
+                            await xmlWriter.WriteStartElementAsync(null, "extensions", _ns);
+                            await xmlWriter.WriteElementStringAsync(null, "speed", _ns, trackpoint.Speed.Value.ToString());
+                            await xmlWriter.WriteEndElementAsync(); // extensions
                         }
 
-                        xmlWriter.WriteEndElementAsync(); // trkpt
+                        await xmlWriter.WriteEndElementAsync(); // trkpt
+
+                        _trackExportProgress.OnNext(new TrackExportProgress(trackSummary.NumberOfWaypoints, trackSummary.NumberOfWaypoints, ++trackpointIndex, trackSummary.NumberOfTrackpoints));
                     }
 
-                    xmlWriter.WriteEndElementAsync(); // trkseg
-                    xmlWriter.WriteEndElementAsync(); // trk
+                    await xmlWriter.WriteEndElementAsync(); // trkseg
+                    await xmlWriter.WriteEndElementAsync(); // trk
                 }
 
 
-                xmlWriter.WriteEndElementAsync(); // gpx
+                await xmlWriter.WriteEndElementAsync(); // gpx
 
-                xmlWriter.WriteEndDocumentAsync();
+                await xmlWriter.WriteEndDocumentAsync();
             }
         }
+
+        private readonly Subject<TrackExportProgress> _trackExportProgress;
+        public IObservable<TrackExportProgress> TrackExportProgress { get { return _trackExportProgress; } }
     }
 }
