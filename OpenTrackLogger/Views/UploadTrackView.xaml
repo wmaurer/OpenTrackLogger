@@ -11,10 +11,15 @@
     
     <Grid x:Name="LayoutRoot" Background="{StaticResource PhoneChromeBrush}">
         <StackPanel Orientation="Vertical">
+            <TextBlock Text="Exporting to GPX:" Margin="0,20,0,10"/>
             <ProgressBar x:Name="ExportProgressBar" IsIndeterminate="False" Maximum="100"/>
             <TextBlock x:Name="ExportProgressText"/>
-            <TextBlock x:Name="ZipProgress"/>
-            <TextBlock x:Name="UploadPercentage"/>
+            <TextBlock Text="Creating zip file:" Margin="0,20,0,10"/>
+            <ProgressBar x:Name="ZipProgressBar" IsIndeterminate="False" Maximum="100"/>
+            <TextBlock x:Name="ZipProgressText"/>
+            <TextBlock Text="Uploading to OneDrive:" Margin="0,20,0,10"/>
+            <ProgressBar x:Name="UploadProgressBar" IsIndeterminate="False" Maximum="100"/>
+            <TextBlock x:Name="UploadProgressText"/>
         </StackPanel>
     </Grid>
 </UserControl>

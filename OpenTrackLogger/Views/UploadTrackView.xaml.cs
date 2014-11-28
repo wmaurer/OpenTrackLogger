@@ -14,8 +14,10 @@
 
             this.OneWayBind(ViewModel, x => x.ExportProgress, x => x.ExportProgressBar.Value);
             this.OneWayBind(ViewModel, x => x.ExportProgressText, x => x.ExportProgressText.Text);
-            this.OneWayBind(ViewModel, x => x.ZipProgress, x => x.ZipProgress.Text);
-            this.OneWayBind(ViewModel, x => x.UploadPercentage, x => x.UploadPercentage.Text);
+            this.OneWayBind(ViewModel, x => x.ZipProgress, x => x.ZipProgressBar.Value);
+            this.OneWayBind(ViewModel, x => x.ZipProgressText, x => x.ZipProgressText.Text);
+            this.OneWayBind(ViewModel, x => x.UploadProgress, x => x.UploadProgressBar.Value);
+            this.OneWayBind(ViewModel, x => x.UploadProgressText, x => x.UploadProgressText.Text);
         }
 
         #region ViewModel

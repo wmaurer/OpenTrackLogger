@@ -8,6 +8,7 @@
 
     using ReactiveUI;
     using ReactiveUI.Mobile;
+    using ReactiveUI.NLog;
 
     public class AppBootstrapper : ReactiveObject, IApplicationRootState, IDisposable
     {
@@ -24,6 +25,11 @@
 
             var resolver = RxApp.MutableResolver;
 
+            resolver.RegisterConstant(new DebugLogger { Level = LogLevel.Info }, typeof(ILogger));
+
+            var logManager = RxApp.MutableResolver.GetService<ILogManager>();
+            RxApp.MutableResolver.RegisterConstant(logManager.GetLogger<NLogLogger>(), typeof(IFullLogger)); 
+            
             resolver.RegisterConstant(this, typeof(IApplicationRootState));
             resolver.RegisterConstant(this, typeof(IScreen));
 

@@ -5,7 +5,6 @@
     using System.Reactive.Linq;
     using System.Reactive.Threading.Tasks;
 
-    using OpenTrackLogger.Mixins;
     using OpenTrackLogger.Services;
 
     using ReactiveUI;
@@ -23,7 +22,11 @@
             var trackExportService = RxApp.DependencyResolver.GetService<ITrackExportService>();
 
             var getOneDriveClient = new ReactiveCommand();
-            getOneDriveClient.ThrownExceptions.LogException("getOneDriveClient received exception");
+            getOneDriveClient.ThrownExceptions
+                .Do(exception => {
+                    var xxx = exception;
+                })
+                .Log(this, "getOneDriveClient received exception");
             getOneDriveClient.ObserveOn(RxApp.MainThreadScheduler)
                 .SelectMany(x => _oneDriveClientService.GetClient().ToObservable())
                 .ObserveOn(RxApp.TaskpoolScheduler)
@@ -32,7 +35,7 @@
                 .Subscribe();
 
             var uploadTrack = new ReactiveCommand();
-            uploadTrack.ThrownExceptions.LogException("uploadTrack received exception");
+            uploadTrack.ThrownExceptions.Log(this, "uploadTrack received exception");
             uploadTrack.InvokeCommand(getOneDriveClient);
 
             var trackExportProgress = trackExportService.TrackExportProgress
@@ -48,12 +51,20 @@
                 .ToProperty(this, x => x.ExportProgress);
 
             _zipProgress = localDriveService.ZipProgress
-                .Select(x => string.Format("{0} / {1}", x.FilesWritten, x.TotalFiles))
+                .Select(x => x.PercentageComplete)
                 .ToProperty(this, x => x.ZipProgress);
 
-            _uploadPercentage = oneDriveService.UploadProgress
+            _zipProgressText = localDriveService.ZipProgress
+                .Select(x => string.Format("{0} / {1}", x.FilesWritten, x.TotalFiles))
+                .ToProperty(this, x => x.ZipProgressText);
+
+            _uploadProgress = oneDriveService.UploadProgress
+                .Select(x => x.ProgressPercentage)
+                .ToProperty(this, x => x.UploadProgress);
+
+            _uploadProgressText = oneDriveService.UploadProgress
                 .Select(x => x.ProgressPercentage.ToString("N"))
-                .ToProperty(this, x => x.UploadPercentage, "0.0");
+                .ToProperty(this, x => x.UploadProgressText, "0.0");
 
             oneDriveService.UploadProgress
                 .SkipWhile(x => x.ProgressPercentage < 100)
@@ -93,11 +104,17 @@
         private readonly ObservableAsPropertyHelper<string> _exportProgressText;
         public string ExportProgressText { get { return _exportProgressText.Value; } }
 
-        private readonly ObservableAsPropertyHelper<string> _zipProgress;
-        public string ZipProgress { get { return _zipProgress.Value; } }
+        private readonly ObservableAsPropertyHelper<double> _zipProgress;
+        public double ZipProgress { get { return _zipProgress.Value; } }
 
-        private readonly ObservableAsPropertyHelper<string> _uploadPercentage;
-        public string UploadPercentage { get { return _uploadPercentage.Value; } }
+        private readonly ObservableAsPropertyHelper<string> _zipProgressText;
+        public string ZipProgressText { get { return _zipProgressText.Value; } }
+
+        private readonly ObservableAsPropertyHelper<double> _uploadProgress;
+        public double UploadProgress { get { return _uploadProgress.Value; } }
+
+        private readonly ObservableAsPropertyHelper<string> _uploadProgressText;
+        public string UploadProgressText { get { return _uploadProgressText.Value; } }
 
         public string UrlPathSegment
         {

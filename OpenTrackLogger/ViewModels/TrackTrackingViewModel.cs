@@ -111,7 +111,11 @@
                 });
 
             var insertPhoto = new ReactiveCommand();
-            insertPhoto.ThrownExceptions.LogException("insertPhoto received exception");
+            insertPhoto.ThrownExceptions
+                .Do(exception => {
+                    var xxx = exception;
+                })
+                .Log2(this, "insertPhoto received exception");
             insertPhoto.RegisterAsyncTask(async x => {
                 var photoResult = (PhotoResult)x;
                 var filename = Path.GetFileName(photoResult.OriginalFileName);
